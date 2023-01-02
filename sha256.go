@@ -5,11 +5,11 @@ import (
 	"math/bits"
 )
 
-const chunkSizeBytes = 64 // 512-bits
+const CHUNK_SIZE_BYTES = 64 // 512-bits
 
 // Initialize array of round constants:
 // (first 32 bits of the fractional parts of the cube roots of the first 64 primes 2..311):
-var k [64]uint32 = [64]uint32{
+var K [64]uint32 = [64]uint32{
 	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
 	0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
 	0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
@@ -20,7 +20,7 @@ var k [64]uint32 = [64]uint32{
 	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 }
 
-func newInitialHashState() [8]uint32 {
+func newHash() [8]uint32 {
 	return [8]uint32{
 		0x6a09e667, // a
 		0xbb67ae85, // b
@@ -47,7 +47,7 @@ func prepareInput(inputBytes []byte) []byte {
 	inputBytes = append(inputBytes, 0b10000000)
 
 	// ensure multiple of 512-bits (64 bytes)
-	paddingSize := chunkSizeBytes - ((messagesSizeBytes + sizeConstantOneBytes) % chunkSizeBytes)
+	paddingSize := CHUNK_SIZE_BYTES - ((messagesSizeBytes + sizeConstantOneBytes) % CHUNK_SIZE_BYTES)
 
 	// size in bits
 	messageSizeBytes := paddedSize(messagesSizeBytes * 8)
@@ -115,14 +115,16 @@ func toByteArray(arr []uint32) []byte {
 func compress(currentHash [8]uint32, schedule [64]uint32) [8]uint32 {
 	var hash = currentHash
 	// Copy to intialize the working set
+	// index mapping: a=0;b=1;c=2;d=3;e=4;f=5;g=6;h=7
 	var ws [8]uint32 = hash
 	for i := 0; i < 64; i++ {
 		sm1 := bits.RotateLeft32(ws[4], -6) ^ bits.RotateLeft32(ws[4], -11) ^ bits.RotateLeft32(ws[4], -25)
 		sm0 := bits.RotateLeft32(ws[0], -2) ^ bits.RotateLeft32(ws[0], -13) ^ bits.RotateLeft32(ws[0], -22)
 		choice := (ws[4] & ws[5]) ^ (^ws[4] & ws[6])
 		maj := (ws[0] & ws[1]) ^ (ws[0] & ws[2]) ^ (ws[1] & ws[2])
-		temp1 := ws[7] + sm1 + choice + k[i] + schedule[i]
+		temp1 := ws[7] + sm1 + choice + K[i] + schedule[i]
 		temp2 := sm0 + maj
+		// apply rotations
 		for i := 7; i >= 0; i-- {
 			if i == 0 {
 				ws[i] = temp1 + temp2
@@ -133,6 +135,7 @@ func compress(currentHash [8]uint32, schedule [64]uint32) [8]uint32 {
 			}
 		}
 	}
+	// append to current hash
 	for i := 0; i < 8; i++ {
 		hash[i] = hash[i] + ws[i]
 	}
@@ -141,12 +144,14 @@ func compress(currentHash [8]uint32, schedule [64]uint32) [8]uint32 {
 
 func Hash(bytes []byte) []byte {
 	inputBytes := prepareInput(bytes)
-	chunks := len(inputBytes) / chunkSizeBytes
-	hash := newInitialHashState()
+	chunks := len(inputBytes) / CHUNK_SIZE_BYTES
+	hash := newHash()
 
 	for i := 0; i < chunks; i++ {
-		messageSchedule := newMessageSchedule(inputBytes[i*chunkSizeBytes : i+chunkSizeBytes])
+		start, end := i*CHUNK_SIZE_BYTES, (i+1)*CHUNK_SIZE_BYTES
+		messageSchedule := newMessageSchedule(inputBytes[start:end])
 		hash = compress(hash, messageSchedule)
 	}
+
 	return toByteArray(hash[:])
 }
