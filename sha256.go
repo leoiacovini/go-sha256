@@ -22,14 +22,8 @@ var K [64]uint32 = [64]uint32{
 
 func newHash() [8]uint32 {
 	return [8]uint32{
-		0x6a09e667, // a
-		0xbb67ae85, // b
-		0x3c6ef372, // c
-		0xa54ff53a, // d
-		0x510e527f, // e
-		0x9b05688c, // f
-		0x1f83d9ab, // g
-		0x5be0cd19, // h
+		0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+		0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 	}
 }
 
@@ -112,24 +106,24 @@ func toByteArray(arr []uint32) []byte {
 	return bs
 }
 
-func compress(currentHash [8]uint32, schedule [64]uint32) [8]uint32 {
-	var hash = currentHash
+func compress(currentHash *[8]uint32, schedule [64]uint32) {
+	// index mapping aliases
+	const a, b, c, d, e, f, g, h = 0, 1, 2, 3, 4, 5, 6, 7
 	// Copy to intialize the working set
-	// index mapping: a=0;b=1;c=2;d=3;e=4;f=5;g=6;h=7
-	var ws [8]uint32 = hash
+	var ws [8]uint32 = *currentHash
 	for i := 0; i < 64; i++ {
-		sm1 := bits.RotateLeft32(ws[4], -6) ^ bits.RotateLeft32(ws[4], -11) ^ bits.RotateLeft32(ws[4], -25)
-		sm0 := bits.RotateLeft32(ws[0], -2) ^ bits.RotateLeft32(ws[0], -13) ^ bits.RotateLeft32(ws[0], -22)
-		choice := (ws[4] & ws[5]) ^ (^ws[4] & ws[6])
-		maj := (ws[0] & ws[1]) ^ (ws[0] & ws[2]) ^ (ws[1] & ws[2])
-		temp1 := ws[7] + sm1 + choice + K[i] + schedule[i]
+		sm1 := bits.RotateLeft32(ws[e], -6) ^ bits.RotateLeft32(ws[e], -11) ^ bits.RotateLeft32(ws[e], -25)
+		sm0 := bits.RotateLeft32(ws[a], -2) ^ bits.RotateLeft32(ws[a], -13) ^ bits.RotateLeft32(ws[a], -22)
+		choice := (ws[e] & ws[f]) ^ (^ws[e] & ws[g])
+		maj := (ws[a] & ws[b]) ^ (ws[a] & ws[c]) ^ (ws[b] & ws[c])
+		temp1 := ws[h] + sm1 + choice + K[i] + schedule[i]
 		temp2 := sm0 + maj
 		// apply rotations
 		for i := 7; i >= 0; i-- {
-			if i == 0 {
+			if i == a {
 				ws[i] = temp1 + temp2
-			} else if i == 4 {
-				ws[i] = ws[i-1] + temp1
+			} else if i == e {
+				ws[i] = ws[d] + temp1
 			} else {
 				ws[i] = ws[i-1]
 			}
@@ -137,9 +131,8 @@ func compress(currentHash [8]uint32, schedule [64]uint32) [8]uint32 {
 	}
 	// append to current hash
 	for i := 0; i < 8; i++ {
-		hash[i] = hash[i] + ws[i]
+		currentHash[i] = currentHash[i] + ws[i]
 	}
-	return hash
 }
 
 func Hash(bytes []byte) []byte {
@@ -150,7 +143,7 @@ func Hash(bytes []byte) []byte {
 	for i := 0; i < chunks; i++ {
 		start, end := i*CHUNK_SIZE_BYTES, (i+1)*CHUNK_SIZE_BYTES
 		messageSchedule := newMessageSchedule(inputBytes[start:end])
-		hash = compress(hash, messageSchedule)
+		compress(&hash, messageSchedule)
 	}
 
 	return toByteArray(hash[:])
